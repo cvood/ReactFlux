@@ -29,7 +29,7 @@ import { settingsState } from "@/store/settingsState"
 import { generateRelativeTime, getUTCDate } from "@/utils/date"
 import { filterByQuery } from "@/utils/kmp"
 import createSetter from "@/utils/nanostores"
-import { sleep } from "@/utils/time"
+import sleep from "@/utils/time"
 import "./FeedList.css"
 
 const filterStringState = atom("")
@@ -136,6 +136,7 @@ const RefreshModal = ({ visible, setVisible }) => {
     const id = "bulk-refresh-error-feeds"
     Message.loading({
       id,
+      duration: 0,
       content: polyglot.t("feed_table.bulk_refresh_error_feeds_message"),
     })
 
@@ -538,6 +539,29 @@ const FeedList = () => {
     },
   ].filter(Boolean)
 
+  const [pagination, setPagination] = useState({
+    showJumper: true,
+    showTotal: true,
+    total: tableData.length,
+    pageSize: 15,
+    current: 1,
+    sizeCanChange: false,
+  })
+
+  const handleTableChange = (pagination) => {
+    setPagination((prev) => ({
+      ...prev,
+      current: pagination.current,
+    }))
+  }
+
+  useEffect(() => {
+    setPagination((prev) => ({
+      ...prev,
+      total: tableData.length,
+    }))
+  }, [tableData.length])
+
   return (
     <>
       <div className="feed-table-action-bar">
@@ -612,10 +636,21 @@ const FeedList = () => {
         columns={columns}
         data={tableData}
         loading={!isAppDataReady}
-        pagePosition="bottomCenter"
-        pagination={{ pageSize: 15 }}
+        pagination={pagination}
         scroll={{ x: true }}
         size="small"
+        renderPagination={(paginationNode) => (
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "center",
+              marginTop: 10,
+            }}
+          >
+            {paginationNode}
+          </div>
+        )}
+        onChange={handleTableChange}
       />
       {selectedFeed && (
         <EditFeedModal

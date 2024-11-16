@@ -1,5 +1,12 @@
 import sanitize from "sanitize-html"
 
+export const allowedIframeHostnames = [
+  "www.youtube.com",
+  "www.youtube-nocookie.com",
+  "player.bilibili.com",
+  "player.vimeo.com",
+]
+
 const getSanitizeOptions = () => ({
   allowedTags: sanitize.defaults.allowedTags.concat(["img", "iframe", "video", "source"]),
   allowedAttributes: {
@@ -23,19 +30,7 @@ const getSanitizeOptions = () => ({
       "loading",
       "src",
     ],
-    video: [
-      "autoplay",
-      "controls",
-      "height",
-      "loop",
-      "muted",
-      "playsinline",
-      "poster",
-      "preload",
-      "src",
-      "type",
-      "width",
-    ],
+    video: ["height", "poster", "src", "width"],
     source: ["src", "type"],
     // used by littlefoot
     a: ["href", "name", "target", "rel", "referrerpolicy"],
@@ -43,12 +38,7 @@ const getSanitizeOptions = () => ({
     li: ["id"],
   },
   allowedSchemes: ["http", "https", "data", "mailto"],
-  allowedIframeHostnames: [
-    "www.youtube.com",
-    "www.youtube-nocookie.com",
-    "player.bilibili.com",
-    "player.vimeo.com",
-  ],
+  allowedIframeHostnames,
 })
 
 const sanitizeHtml = (content) => {

@@ -7,10 +7,9 @@ import FeedIcon from "@/components/ui/FeedIcon"
 import useEntryActions from "@/hooks/useEntryActions"
 import { contentState } from "@/store/contentState"
 import { settingsState } from "@/store/settingsState"
+import { MIN_THUMBNAIL_SIZE, WIDE_IMAGE_RATIO } from "@/utils/constants"
 import { generateReadingTime, generateRelativeTime } from "@/utils/date"
 import "./ArticleCard.css"
-
-const ASPECT_RATIO_THRESHOLD = 4 / 3
 
 const ArticleCardImage = ({ entry, isWideImage }) => {
   const imageSize = isWideImage
@@ -21,7 +20,7 @@ const ArticleCardImage = ({ entry, isWideImage }) => {
     <div className="card-thumbnail">
       <img
         alt={entry.id}
-        src={entry.imgSrc}
+        src={entry.coverSource}
         style={{
           width: imageSize.width,
           height: imageSize.height,
@@ -91,22 +90,23 @@ const ArticleCard = ({ entry, handleEntryClick, children }) => {
   })
 
   useEffect(() => {
-    if (entry.imgSrc) {
+    if (entry.coverSource) {
       const img = new Image()
-      img.src = entry.imgSrc
+      img.src = entry.coverSource
       img.onload = () => {
         const aspectRatio = img.naturalWidth / img.naturalHeight
-        setIsWideImage(aspectRatio >= ASPECT_RATIO_THRESHOLD)
+        const isThumbnailSize = Math.max(img.width, img.height) <= MIN_THUMBNAIL_SIZE
+        setIsWideImage(aspectRatio >= WIDE_IMAGE_RATIO && !isThumbnailSize)
         setIsImageLoaded(true)
       }
       img.onerror = () => {
         setHasError(true)
       }
     }
-  }, [entry.imgSrc])
+  }, [entry.coverSource])
 
   const getLineClamp = () => {
-    const hasSideImage = entry.imgSrc && !hasError && !isWideImage
+    const hasSideImage = entry.coverSource && !hasError && !isWideImage
     return !showEstimatedReadingTime && hasSideImage ? 4 : 3
   }
 
@@ -142,7 +142,7 @@ const ArticleCard = ({ entry, handleEntryClick, children }) => {
             </div>
             <div className="card-time-wrapper">
               <span className="card-star">
-                {entry.starred && <IconStarFill className="icon-starred" />}
+                <IconStarFill className="icon-starred" style={{ opacity: entry.starred ? 1 : 0 }} />
               </span>
               <span className="card-time">
                 {generateRelativeTime(entry.published_at, showDetailedRelativeTime)}
@@ -153,7 +153,7 @@ const ArticleCard = ({ entry, handleEntryClick, children }) => {
           <h3 className="card-title">{entry.title}</h3>
         </div>
 
-        {entry.imgSrc && !hasError && isImageLoaded && isWideImage && (
+        {entry.coverSource && !hasError && isImageLoaded && isWideImage && (
           <div className="card-image-wide">
             <ArticleCardImage entry={entry} isWideImage={isWideImage} setHasError={setHasError} />
           </div>
@@ -174,7 +174,7 @@ const ArticleCard = ({ entry, handleEntryClick, children }) => {
               {previewContent}
             </p>
           </div>
-          {entry.imgSrc && !hasError && isImageLoaded && !isWideImage && (
+          {entry.coverSource && !hasError && isImageLoaded && !isWideImage && (
             <div className="card-image-mini">
               <ArticleCardImage entry={entry} isWideImage={isWideImage} setHasError={setHasError} />
             </div>

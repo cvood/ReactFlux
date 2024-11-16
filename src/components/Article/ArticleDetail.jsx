@@ -1,5 +1,4 @@
 import { Divider, Tag, Typography } from "@arco-design/web-react"
-import MuxPlayer from "@mux/mux-player-react"
 import { useStore } from "@nanostores/react"
 import ReactHtmlParser from "html-react-parser"
 import { littlefoot } from "littlefoot"
@@ -14,6 +13,7 @@ import ImageOverlayButton from "./ImageOverlayButton"
 
 import CustomLink from "@/components/ui/CustomLink"
 import FadeTransition from "@/components/ui/FadeTransition"
+import PlyrPlayer from "@/components/ui/PlyrPlayer"
 import usePhotoSlider from "@/hooks/usePhotoSlider"
 import useScreenWidth from "@/hooks/useScreenWidth"
 import { contentState, setFilterString, setFilterType } from "@/store/contentState"
@@ -48,7 +48,7 @@ const handleBskyVideo = (node) => {
     const thumbnailUrl = node.attribs.src
     const playlistUrl = thumbnailUrl.replace("thumbnail.jpg", "playlist.m3u8")
 
-    return <MuxPlayer controls poster={thumbnailUrl} src={playlistUrl} />
+    return <PlyrPlayer poster={thumbnailUrl} src={playlistUrl} />
   }
   return null
 }
@@ -63,20 +63,28 @@ const handleImage = (node, imageSources, togglePhotoSlider) => {
   return <ImageOverlayButton index={index} node={node} togglePhotoSlider={togglePhotoSlider} />
 }
 
-const parseCodeContent = (pre) => {
-  return pre.children
-    .map((child) => child.data || (child.name === "br" ? "\n" : ""))
+const htmlEntities = {
+  "&#39;": "'",
+  "&quot;": '"',
+  "&lt;": "<",
+  "&gt;": ">",
+  "&amp;": "&",
+}
+
+const decodeAndParseCodeContent = (preElement) => {
+  return preElement.children
+    .map((child) => {
+      if (child.type === "tag" && child.name === "strong") {
+        return child.children[0]?.data ?? ""
+      }
+      return child.data ?? (child.name === "br" ? "\n" : "")
+    })
     .join("")
-    .replace(/&#39;/g, "'")
-    .replace(/&quot;/g, '"')
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&amp;/g, "&")
+    .replace(new RegExp(Object.keys(htmlEntities).join("|"), "g"), (match) => htmlEntities[match])
 }
 
 const handleTableBasedCode = (node) => {
-  const table = node.children[0]
-  const tbody = table.children.find((child) => child.name === "tbody")
+  const tbody = node.children.find((child) => child.name === "tbody")
   if (!tbody) {
     return null
   }
@@ -86,17 +94,29 @@ const handleTableBasedCode = (node) => {
     return null
   }
 
-  const codeTd = tr.children[1]
-  const pre = codeTd.children.find((child) => child.name === "pre")
+  const [, codeTd] = tr.children
 
-  return pre ? parseCodeContent(pre) : null
+  const codePre = codeTd.children.find((child) => child.name === "pre")
+
+  if (!codePre) {
+    return null
+  }
+
+  return decodeAndParseCodeContent(codePre)
 }
 
 const handleFigure = (node, imageSources, togglePhotoSlider) => {
   const firstChild = node.children[0]
 
-  if (firstChild.name === "img") {
-    return handleImage(firstChild, imageSources, togglePhotoSlider)
+  // Handle multiple images in figure
+  if (node.children.some((child) => child.name === "img")) {
+    return (
+      <>
+        {node.children.map((child, index) =>
+          child.name === "img" ? handleImage(child, imageSources, togglePhotoSlider) : null,
+        )}
+      </>
+    )
   }
 
   // Handle table-based code blocks with line numbers
@@ -128,9 +148,9 @@ const handleCodeBlock = (node) => {
   // Extract code content
   let codeContent
   if (node.children[0]?.name === "code") {
-    codeContent = node.children[0].children[0]?.data || ""
+    codeContent = decodeAndParseCodeContent(node.children[0])
   } else {
-    codeContent = node.children.map((child) => child.data || "").join("")
+    codeContent = decodeAndParseCodeContent(node)
   }
 
   return <CodeBlock>{codeContent}</CodeBlock>
@@ -145,7 +165,9 @@ const handleVideo = (node) => {
     return node
   }
 
-  return <MuxPlayer controls poster={node.attribs.poster} src={videoSrc} />
+  return (
+    <PlyrPlayer poster={node.attribs.poster} sourceType={sourceNode?.attribs.type} src={videoSrc} />
+  )
 }
 
 const getHtmlParserOptions = (imageSources, togglePhotoSlider) => ({
@@ -200,6 +222,8 @@ const ArticleDetail = forwardRef((_, ref) => {
   const parsedHtml = ReactHtmlParser(sanitizedHtml, htmlParserOptions)
   const { id: categoryId, title: categoryTitle } = activeContent.feed.category
   const { id: feedId, title: feedTitle } = activeContent.feed
+
+  const { coverSource, mediaPlayerEnclosure, isMedia } = activeContent
 
   // pretty footnotes
   useEffect(() => {
@@ -263,6 +287,16 @@ const ArticleDetail = forwardRef((_, ref) => {
               "--article-width": articleWidth,
             }}
           >
+            {isMedia && mediaPlayerEnclosure && (
+              <PlyrPlayer
+                enclosure={mediaPlayerEnclosure}
+                poster={coverSource}
+                src={mediaPlayerEnclosure.url}
+                style={{
+                  maxWidth: mediaPlayerEnclosure.mime_type.startsWith("video/") ? "100%" : "400px",
+                }}
+              />
+            )}
             {parsedHtml}
             <PhotoSlider
               bannerVisible={!isBelowMedium}

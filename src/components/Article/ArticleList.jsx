@@ -1,17 +1,19 @@
 import { Divider, Spin } from "@arco-design/web-react"
 import { useStore } from "@nanostores/react"
-import { useVirtualizer } from "@tanstack/react-virtual"
+import { throttle } from "lodash-es"
 import { forwardRef, useCallback, useEffect, useMemo } from "react"
 import { useInView } from "react-intersection-observer"
 import SimpleBar from "simplebar-react"
+import { Virtualizer } from "virtua"
 
 import ArticleCard from "./ArticleCard"
 import LoadingCards from "./LoadingCards"
 
 import FadeTransition from "@/components/ui/FadeTransition"
 import Ripple from "@/components/ui/Ripple"
+import { feedIconsState } from "@/hooks/useFeedIcons"
 import useLoadMore from "@/hooks/useLoadMore"
-import { contentState, filteredEntriesState } from "@/store/contentState"
+import { contentState, filteredEntriesState, setEntries } from "@/store/contentState"
 
 import "./ArticleList.css"
 
@@ -48,90 +50,74 @@ const LoadMoreComponent = ({ getEntries }) => {
 const ArticleList = forwardRef(({ getEntries, handleEntryClick, cardsRef }, ref) => {
   const { isArticleListReady, loadMoreVisible } = useStore(contentState)
   const filteredEntries = useStore(filteredEntriesState)
+  const feedIcons = useStore(feedIconsState)
 
   const { loadingMore, handleLoadMore } = useLoadMore()
-
-  const items = useMemo(() => filteredEntries, [filteredEntries])
-
-  const virtualizer = useVirtualizer({
-    count: items.length,
-    getScrollElement: () => cardsRef.current,
-    estimateSize: () => 160,
-    overscan: 10,
-  })
-
-  const virtualItems = virtualizer.getVirtualItems()
-
   const canLoadMore = loadMoreVisible && isArticleListReady && !loadingMore
 
-  const checkAndLoadMore = useCallback(
-    (scrollElement) => {
-      if (!canLoadMore) {
-        return
-      }
+  const checkAndLoadMore = useMemo(
+    () =>
+      throttle((element) => {
+        if (!canLoadMore) {
+          return
+        }
 
-      const { scrollTop, clientHeight, scrollHeight } = scrollElement
-      const scrollPercentage = (scrollTop + clientHeight) / scrollHeight
-
-      if (scrollPercentage >= 0.8) {
-        handleLoadMore(getEntries)
-      }
-    },
+        const threshold = element.scrollHeight * 0.8
+        const scrolledDistance = element.scrollTop + element.clientHeight
+        if (scrolledDistance >= threshold) {
+          handleLoadMore(getEntries)
+        }
+      }, 200),
     [canLoadMore, handleLoadMore, getEntries],
   )
 
   useEffect(() => {
-    const { scrollElement } = virtualizer
-    if (!scrollElement) {
-      return
-    }
-
-    const handleScroll = () => checkAndLoadMore(scrollElement)
-    scrollElement.addEventListener("scroll", handleScroll)
-
-    return () => {
-      scrollElement.removeEventListener("scroll", handleScroll)
-    }
-  }, [virtualizer, checkAndLoadMore])
+    setEntries((prev) =>
+      prev.map((entry) => {
+        const feedIconId = entry.feed.icon.icon_id
+        const feedIcon = feedIcons[feedIconId]
+        if (feedIcon?.width) {
+          return {
+            ...entry,
+            coverSource: feedIcon.url,
+          }
+        }
+        return entry
+      }),
+    )
+  }, [feedIcons])
 
   return (
     <SimpleBar ref={ref} className="entry-list" scrollableNodeProps={{ ref: cardsRef }}>
       <LoadingCards />
       {isArticleListReady && (
-        <FadeTransition
-          y={20}
-          style={{
-            height: virtualizer.getTotalSize(),
-            width: "100%",
-            position: "relative",
-          }}
-        >
-          {virtualItems.map((item) => (
-            <div
-              key={item.key}
-              ref={virtualizer.measureElement}
-              data-index={item.index}
-              style={{
-                position: "absolute",
-                top: 0,
-                left: 0,
-                width: "100%",
-                transform: `translateY(${item.start}px)`,
-              }}
-            >
-              <ArticleCard entry={filteredEntries[item.index]} handleEntryClick={handleEntryClick}>
-                <Ripple color="var(--color-text-4)" duration={1000} />
-              </ArticleCard>
-              {item.index < filteredEntries.length - 1 && (
-                <Divider
-                  style={{
-                    margin: "8px 0",
-                    borderBottom: "1px solid var(--color-border-2)",
-                  }}
-                />
-              )}
-            </div>
-          ))}
+        <FadeTransition y={20}>
+          <Virtualizer
+            overscan={10}
+            scrollRef={cardsRef}
+            onRangeChange={() => {
+              const element = cardsRef.current
+              if (element) {
+                checkAndLoadMore(element)
+              }
+            }}
+          >
+            {filteredEntries.map((entry, index) => (
+              <div key={entry.id}>
+                <ArticleCard entry={entry} handleEntryClick={handleEntryClick}>
+                  <Ripple color="var(--color-text-4)" duration={1000} />
+                </ArticleCard>
+                {index < filteredEntries.length - 1 && (
+                  <Divider
+                    style={{
+                      margin: "8px 0",
+                      borderBottom: "1px solid var(--color-border-2)",
+                    }}
+                  />
+                )}
+              </div>
+            ))}
+          </Virtualizer>
         </FadeTransition>
       )}
       <LoadMoreComponent getEntries={getEntries} />

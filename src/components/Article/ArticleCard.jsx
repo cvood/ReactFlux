@@ -7,7 +7,7 @@ import FeedIcon from "@/components/ui/FeedIcon"
 import useEntryActions from "@/hooks/useEntryActions"
 import { contentState } from "@/store/contentState"
 import { settingsState } from "@/store/settingsState"
-import { MIN_THUMBNAIL_SIZE, WIDE_IMAGE_RATIO } from "@/utils/constants"
+import { WIDE_IMAGE_RATIO } from "@/utils/constants"
 import { generateReadingTime, generateRelativeTime } from "@/utils/date"
 import "./ArticleCard.css"
 
@@ -90,17 +90,32 @@ const ArticleCard = ({ entry, handleEntryClick, children }) => {
   })
 
   useEffect(() => {
+    let isSubscribed = true
+
     if (entry.coverSource) {
       const img = new Image()
       img.src = entry.coverSource
+
       img.onload = () => {
-        const aspectRatio = img.naturalWidth / img.naturalHeight
-        const isThumbnailSize = Math.max(img.width, img.height) <= MIN_THUMBNAIL_SIZE
-        setIsWideImage(aspectRatio >= WIDE_IMAGE_RATIO && !isThumbnailSize)
-        setIsImageLoaded(true)
+        if (isSubscribed) {
+          const aspectRatio = img.naturalWidth / img.naturalHeight
+          const isThumbnailSize = Math.max(img.width, img.height) <= 250
+          setIsWideImage(aspectRatio >= WIDE_IMAGE_RATIO && !isThumbnailSize)
+          setIsImageLoaded(true)
+        }
       }
+
       img.onerror = () => {
-        setHasError(true)
+        if (isSubscribed) {
+          setHasError(true)
+        }
+      }
+
+      return () => {
+        isSubscribed = false
+        img.src = ""
+        img.onload = null
+        img.onerror = null
       }
     }
   }, [entry.coverSource])
